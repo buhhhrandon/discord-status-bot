@@ -19,6 +19,8 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Cache to store last known channel names to prevent unnecessary edits
+last_channel_names = {}
 
 def get_stats(guild):
     online = 0
@@ -37,11 +39,6 @@ def get_stats(guild):
 
     return online, in_voice, listening
 
-
-def normalize(text):
-    return ''.join(text.strip().split())
-
-
 @bot.event
 async def on_ready():
     print(f"{bot.user} is online!")
@@ -50,7 +47,6 @@ async def on_ready():
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
     update_voice_channels.start()
-
 
 @tasks.loop(seconds=60)
 async def update_voice_channels():
@@ -73,35 +69,19 @@ async def update_voice_channels():
             print(f"Channel ID {channel_id} not found.")
             continue
 
-        if normalize(channel.name) != normalize(new_name):
-            try:
-                await channel.edit(name=new_name)
-                print(f"✅ Updated: {new_name}")
-            except discord.errors.HTTPException as e:
-                print(f"⚠️ Failed to update {channel.name}: {e}")
-        else:
-            print(f"No change in {channel.name} — skipping.")
+        # Only update if name actually changed
+        if last_channel_names.get(channel_id) == new_name:
+            print(f"No change for {channel.name} — skipping update.")
+            continue
 
+        try:
+            await channel.edit(name=new_name)
+            last_channel_names[channel_id] = new_name
+            print(f"✅ Updated channel {channel.name} to: {new_name}")
+        except discord.errors.HTTPException as e:
+            print(f"⚠️ Failed to update {channel.name}: {e}")
 
 @bot.tree.command(name="status", description="Show server activity (online, in voice, listening to music)")
 async def status(interaction: discord.Interaction):
     await interaction.response.defer()
     guild = interaction.guild
-
-    online, in_voice, listening = get_stats(guild)
-
-    await interaction.followup.send(
-        f"**StatusTracker**\n"
-        f"🟢 Online: **{online}**\n"
-        f"🔊 In Voice: **{in_voice}**\n"
-        f"🎧 Listening to Music: **{listening}**"
-    )
-
-
-@bot.event
-async def setup_hook():
-    bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-
-
-bot.run(TOKEN)
