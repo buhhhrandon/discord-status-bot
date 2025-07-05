@@ -1,8 +1,10 @@
 import discord
+from discord.ext import commands, tasks
+from discord import app_commands
 import asyncio
 import os
-from discord.ext import commands
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -15,10 +17,57 @@ MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
 intents = discord.Intents.default()
 intents.presences = True
 intents.members = True
-intents.guilds = True
 intents.voice_states = True
+intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+async def update_channels():
+    await bot.wait_until_ready()
+    guild = bot.get_guild(GUILD_ID)
+
+    if guild is None:
+        print("❌ Guild not found.")
+        return
+
+    while not bot.is_closed():
+        online_count = 0
+        voice_count = 0
+        listening_count = 0
+
+        for member in guild.members:
+            if member.bot:
+                continue
+            if member.status != discord.Status.offline:
+                online_count += 1
+            if member.voice and member.voice.channel:
+                voice_count += 1
+            if member.activities:
+                for activity in member.activities:
+                    if isinstance(activity, discord.Spotify):
+                        listening_count += 1
+                        break
+
+        try:
+            online_channel = guild.get_channel(ONLINE_CHANNEL_ID)
+            vc_channel = guild.get_channel(VC_CHANNEL_ID)
+            music_channel = guild.get_channel(MUSIC_CHANNEL_ID)
+
+            if online_channel:
+                await online_channel.edit(name=f"🟢 Online: {online_count}")
+            if vc_channel:
+                await vc_channel.edit(name=f"🔊 In Voice: {voice_count}")
+            if music_channel:
+                await music_channel.edit(name=f"🎧 Listening: {listening_count}")
+
+            print(f"[{datetime.now(timezone.utc).isoformat()}] Updated: Online={online_count}, Voice={voice_count}, Music={listening_count}")
+
+        except Exception as e:
+            print(f"❌ Failed to update channels: {e}")
+
+        await asyncio.sleep(60)
+
 
 @bot.event
 async def on_ready():
@@ -29,60 +78,36 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Slash command sync failed: {e}")
 
-async def update_channels():
-    await bot.wait_until_ready()
-    guild = bot.get_guild(GUILD_ID)
+    # ✅ Launch background task properly
+    asyncio.create_task(update_channels())
 
-    while not bot.is_closed():
-        online = sum(1 for member in guild.members if not member.bot and member.status != discord.Status.offline)
-        in_voice = sum(1 for vc in guild.voice_channels for member in vc.members if not member.bot)
-        listening = sum(1 for member in guild.members if not member.bot and member.activities and any(a.type == discord.ActivityType.listening for a in member.activities))
-
-        try:
-            updates = []
-
-            online_channel = guild.get_channel(ONLINE_CHANNEL_ID)
-            new_online_name = f"🟢 Online: {online}"
-            if online_channel and online_channel.name != new_online_name:
-                await online_channel.edit(name=new_online_name)
-                updates.append(f"Online: {online}")
-
-            vc_channel = guild.get_channel(VC_CHANNEL_ID)
-            new_vc_name = f"🔊 In Voice: {in_voice}"
-            if vc_channel and vc_channel.name != new_vc_name:
-                await vc_channel.edit(name=new_vc_name)
-                updates.append(f"In Voice: {in_voice}")
-
-            music_channel = guild.get_channel(MUSIC_CHANNEL_ID)
-            new_music_name = f"🎧 Listening: {listening}"
-            if music_channel and music_channel.name != new_music_name:
-                await music_channel.edit(name=new_music_name)
-                updates.append(f"Listening: {listening}")
-
-            if updates:
-                print(f"✅ Channel Updates — {' | '.join(updates)}")
-
-        except discord.HTTPException as e:
-            if e.status == 429:
-                print("⚠️ Rate limited by Discord. Retrying after delay.")
-            else:
-                print(f"❌ Failed to update channels: {e}")
-
-        await asyncio.sleep(60)
 
 @bot.tree.command(name="status", description="View current online, voice, and music activity")
-async def status(interaction: discord.Interaction):
-    guild = bot.get_guild(GUILD_ID)
-    online = sum(1 for member in guild.members if not member.bot and member.status != discord.Status.offline)
-    in_voice = sum(1 for vc in guild.voice_channels for member in vc.members if not member.bot)
-    listening = sum(1 for member in guild.members if not member.bot and member.activities and any(a.type == discord.ActivityType.listening for a in member.activities))
+async def status_command(interaction: discord.Interaction):
+    guild = interaction.guild
+    if guild is None:
+        await interaction.response.send_message("❌ Command must be used in a server.", ephemeral=True)
+        return
+
+    online = 0
+    in_voice = 0
+    listening = 0
+
+    for member in guild.members:
+        if member.bot:
+            continue
+        if member.status != discord.Status.offline:
+            online += 1
+        if member.voice and member.voice.channel:
+            in_voice += 1
+        if member.activities:
+            for activity in member.activities:
+                if isinstance(activity, discord.Spotify):
+                    listening += 1
+                    break
 
     await interaction.response.send_message(
-        f"🟢 **Online Members**: {online}\n"
-        f"🔊 **In Voice Channels**: {in_voice}\n"
-        f"🎧 **Listening to Music**: {listening}",
-        ephemeral=True
+        f"🟢 Online: {online} | 🔊 In Voice: {in_voice} | 🎧 Listening: {listening}"
     )
 
-bot.loop.create_task(update_channels())
 bot.run(TOKEN)
