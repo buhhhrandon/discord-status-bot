@@ -1,8 +1,10 @@
 import discord
-from discord.ext import commands, tasks
+import asyncio
+import json
 import os
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
-import time
+from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -12,12 +14,37 @@ ONLINE_CHANNEL_ID = int(os.getenv("ONLINE_CHANNEL_ID"))
 VC_CHANNEL_ID = int(os.getenv("VC_CHANNEL_ID"))
 MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
 
-# Enable all intents to ensure presence/activity tracking works
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.presences = True
+intents.members = True
+intents.guilds = True
+intents.voice_states = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+def get_config():
+    with open("config.json") as f:
+        return json.load(f)
 
-def get_stats(guild):
+@bot.event
+async def on_ready():
+    print(f"{bot.user} is online!")
+    await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
+    update_status.start()
+
+last_counts = {
+    "online": None,
+    "in_voice": None,
+    "listening": None
+}
+
+@tasks.loop(seconds=60)
+async def update_status():
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        print("❌ Guild not found.")
+        return
+
     online = 0
     in_voice = 0
     listening = 0
@@ -25,86 +52,37 @@ def get_stats(guild):
     for member in guild.members:
         if member.bot:
             continue
-        if member.status in [discord.Status.online, discord.Status.idle, discord.Status.dnd]:
+        if member.status != discord.Status.offline:
             online += 1
         if member.voice and member.voice.channel:
             in_voice += 1
-        if member.activity and member.activity.type == discord.ActivityType.listening:
-            listening += 1
+        if member.activities:
+            for activity in member.activities:
+                if isinstance(activity, discord.Spotify):
+                    listening += 1
+                    break
 
-    return online, in_voice, listening
-
-
-@bot.event
-async def on_ready():
-    print(f"{bot.user} is online!")
-
-    activity = discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀")
-    await bot.change_presence(status=discord.Status.online, activity=activity)
-
-    update_voice_channels.start()
-
-
-@tasks.loop(seconds=60)
-async def update_voice_channels():
-    guild = bot.get_guild(GUILD_ID)
-    if not guild:
-        print("Guild not found.")
+    if (online == last_counts["online"] and
+        in_voice == last_counts["in_voice"] and
+        listening == last_counts["listening"]):
+        print("No change in status — skipping update.")
         return
 
-    online, in_voice, listening = get_stats(guild)
+    try:
+        await bot.get_channel(ONLINE_CHANNEL_ID).edit(name=f"🟢 {online} Online")
+        await bot.get_channel(VC_CHANNEL_ID).edit(name=f"🎙️ {in_voice} In Voice")
+        await bot.get_channel(MUSIC_CHANNEL_ID).edit(name=f"🎧 {listening} Listening to Music")
 
-    channel_data = [
-        (ONLINE_CHANNEL_ID, f"🟢 {online} Online"),
-        (VC_CHANNEL_ID, f"🎙️ {in_voice} In Voice"),
-        (MUSIC_CHANNEL_ID, f"🎧 {listening} Listening to Music"),
-    ]
+        print(f"✅ Updated: 🟢 {online} | 🎙️ {in_voice} | 🎧 {listening}")
+        last_counts["online"] = online
+        last_counts["in_voice"] = in_voice
+        last_counts["listening"] = listening
 
-    for channel_id, new_name in channel_data:
-        channel = guild.get_channel(channel_id)
-        if not channel:
-            print(f"Channel ID {channel_id} not found.")
-            continue
-
-        if channel.name.strip() != new_name.strip():
-            try:
-                await channel.edit(name=new_name)
-                print(f"Updated {channel.name} → {new_name}")
-            except discord.errors.HTTPException as e:
-                print(f"⚠️ Rate limit or error updating channel {channel_id}: {e}")
-                if hasattr(e.response, "headers"):
-                    headers = e.response.headers
-                    print(f"Headers:\n"
-                          f"  X-RateLimit-Limit: {headers.get('X-RateLimit-Limit')}\n"
-                          f"  X-RateLimit-Remaining: {headers.get('X-RateLimit-Remaining')}\n"
-                          f"  X-RateLimit-Reset: {headers.get('X-RateLimit-Reset')}\n"
-                          f"  X-RateLimit-Reset-After: {headers.get('X-RateLimit-Reset-After')}\n"
-                          f"  X-RateLimit-Scope: {headers.get('X-RateLimit-Scope')}\n"
-                          f"  retry_after: {headers.get('retry_after')}")
-                await discord.utils.sleep_until(discord.utils.utcnow() + discord.utils.timedelta(seconds=10))
+    except discord.errors.HTTPException as e:
+        if e.status == 429:
+            retry = e.response.headers.get("Retry-After")
+            print(f"⚠️ Rate limit hit. Retry After: {retry}s")
         else:
-            print(f"No change in {channel.name} — skipped update.")
-
-
-@bot.tree.command(name="status", description="Show server activity (online, in voice, listening to music)")
-async def status(interaction: discord.Interaction):
-    await interaction.response.defer()
-    guild = interaction.guild
-
-    online, in_voice, listening = get_stats(guild)
-
-    await interaction.followup.send(
-        f"**StatusTracker**\n"
-        f"🟢 Online: **{online}**\n"
-        f"🎙️ In Voice: **{in_voice}**\n"
-        f"🎧 Listening to Music: **{listening}**"
-    )
-
-
-@bot.event
-async def setup_hook():
-    bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-
+            print(f"❌ HTTP Error: {e}")
 
 bot.run(TOKEN)
