@@ -64,7 +64,7 @@ async def update_channels():
     try:
         await guild.get_channel(ONLINE_CHANNEL_ID).edit(name=f"🟢 Online: {online}")
         await guild.get_channel(VC_CHANNEL_ID).edit(name=f"🔊 In Voice: {in_voice}")
-        await guild.get_channel(MUSIC_CHANNEL_ID).edit(name=f"🎵 Listening to Music: {listening}")
+        await guild.get_channel(MUSIC_CHANNEL_ID).edit(name=f"🎧 Listening to Music: {listening}")
         print("Channel names updated successfully.")
         # Update last known counts
         last_online, last_in_voice, last_listening = online, in_voice, listening
@@ -84,7 +84,7 @@ async def status_command(interaction: discord.Interaction):
     embed.set_author(name="StatusTracker", icon_url=bot.user.display_avatar.url)
     embed.add_field(name="🟢 Online", value=str(online), inline=False)
     embed.add_field(name="🔊 In Voice", value=str(in_voice), inline=False)
-    embed.add_field(name="🎵 Listening to Music", value=str(listening), inline=False)
+    embed.add_field(name="🎧 Listening to Music", value=str(listening), inline=False)
 
     await interaction.response.send_message(embed=embed)
 
