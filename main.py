@@ -22,7 +22,6 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Cache to store last known stats
 last_stats = {"online": -1, "voice": -1, "music": -1}
 
 
