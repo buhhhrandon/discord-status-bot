@@ -4,7 +4,7 @@ import json
 import traceback
 from dotenv import load_dotenv
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks, commands
 
 load_dotenv()
 
@@ -26,6 +26,14 @@ MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
 async def on_ready():
     print(f"✅ Bot is ready. Logged in as {bot.user}")
     await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
+
+    try:
+        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"🔁 Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print("🔥 Error syncing slash commands:")
+        traceback.print_exc()
+
     update_channels.start()
 
 @tasks.loop(seconds=60)
@@ -87,10 +95,11 @@ async def update_channels():
         print("🔥 Error in update_channels loop:")
         traceback.print_exc()
 
-@bot.command()
-async def status(ctx):
+# ✅ Slash command version of status
+@bot.tree.command(name="status", description="View current online, voice, and music activity")
+async def status_command(interaction: discord.Interaction):
     try:
-        guild = ctx.guild
+        guild = interaction.guild
         online = 0
         in_voice = 0
         listening = 0
@@ -112,11 +121,11 @@ async def status(ctx):
                         break
 
         msg = f"🟢 Online: {online}\n🔊 In Voice: {in_voice}\n🎧 Listening: {listening}"
-        await ctx.send(msg)
+        await interaction.response.send_message(msg)
 
     except Exception as e:
         print("🔥 Error in /status command:")
         traceback.print_exc()
-        await ctx.send("Something went wrong while fetching the status.")
+        await interaction.response.send_message("Something went wrong while fetching the status.", ephemeral=True)
 
 bot.run(TOKEN)
