@@ -36,6 +36,11 @@ def get_stats(guild):
     return online, in_voice, listening
 
 
+def normalize(text):
+    # remove spaces, tabs, newlines, and normalize emoji formatting
+    return ''.join(text.strip().split())
+
+
 @bot.event
 async def on_ready():
     print(f"{bot.user} is online!")
@@ -58,14 +63,14 @@ async def update_voice_channel():
 
     new_name = f"🟢 {online} Online | 🔊 {in_voice} VC | 🎧 {listening} Music"
 
-    print(f"Current: {channel.name.strip()} | New: {new_name.strip()}")
+    print(f"Current: {channel.name} | New: {new_name}")
 
-    if channel.name.strip() != new_name.strip():
+    if normalize(channel.name) != normalize(new_name):
         try:
             await channel.edit(name=new_name)
-            print(f"Updated voice channel name to: {new_name}")
+            print(f"✅ Updated voice channel name to: {new_name}")
         except discord.errors.HTTPException as e:
-            print(f"Rate limited or failed to update channel name: {e}")
+            print(f"⚠️ Rate limited or failed to update channel name: {e}")
     else:
         print("No change in stats — skipping channel update.")
 
