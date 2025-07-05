@@ -63,8 +63,8 @@ async def update_voice_channels():
 
     updates = [
         (ONLINE_CHANNEL_ID, f"🟢 {online} Online"),
-        (VC_CHANNEL_ID, f"🔊 {in_voice} VC"),
-        (MUSIC_CHANNEL_ID, f"🎧 {listening} Music")
+        (VC_CHANNEL_ID, f"🔊 {in_voice} In Voice"),
+        (MUSIC_CHANNEL_ID, f"🎧 {listening} Listening to Music")
     ]
 
     for channel_id, new_name in updates:
