@@ -12,7 +12,7 @@
 
 ## 🤖 Add to Your Server
 
-[![Add Bot to Server](https://img.shields.io/badge/Invite%20Bot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1390854957195985029&permissions=274878254144&integration_type=0&scope=bot+applications.commands)
+[![Add Bot to Server](https://img.shields.io/badge/Invite%20Bot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1390854957195985029&permissions=1117200&integration_type=0&scope=applications.commands+bot)
 
 ---
 
