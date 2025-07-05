@@ -31,7 +31,8 @@ async def on_ready():
     await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
     update_channels.start()
     try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        # Sync globally (remove guild arg)
+        synced = await bot.tree.sync()
         print(f"Slash commands synced: {[cmd.name for cmd in synced]}")
     except Exception as e:
         print(f"Failed to sync slash commands: {e}")
@@ -86,5 +87,13 @@ async def status_command(interaction: discord.Interaction):
     embed.add_field(name="🎵 Listening to Music", value=str(listening), inline=False)
 
     await interaction.response.send_message(embed=embed)
+
+# Test ping slash command to confirm registration
+@bot.tree.command(name="ping", description="Test command to check if bot responds")
+async def ping_command(interaction: discord.Interaction):
+    await interaction.response.send_message("pong!")
+
+# Debug print to show registered commands after defining them
+print("Commands registered:", bot.tree._commands)
 
 bot.run(TOKEN)
