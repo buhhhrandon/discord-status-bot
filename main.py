@@ -2,7 +2,6 @@ import discord
 import asyncio
 import json
 import os
-from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,94 +18,91 @@ intents.members = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix='/', intents=intents)
+client = discord.Client(intents=intents)
 
 def get_config():
     with open("config.json") as f:
         return json.load(f)
 
-def save_config(config):
-    with open("config.json", "w") as f:
-        json.dump(config, f, indent=4)
-
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user.name}")
-    await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
-    update_channels.start()
-
-@tasks.loop(minutes=2)
 async def update_channels():
-    guild = bot.get_guild(GUILD_ID)
+    await client.wait_until_ready()
+    guild = client.get_guild(GUILD_ID)
     if guild is None:
-        print("Guild not found.")
+        print("Bot is not in the specified guild.")
         return
 
-    online = 0
-    in_voice = 0
-    listening = 0
+    while not client.is_closed():
+        print("Running update_channels loop...")
 
-    for member in guild.members:
-        if member.bot:
-            continue
-        if member.status != discord.Status.offline:
-            online += 1
-        if member.voice and member.voice.channel:
-            in_voice += 1
-        if member.activities:
-            for activity in member.activities:
-                if isinstance(activity, discord.Spotify):
-                    listening += 1
-                    break
+        online = 0
+        in_voice = 0
+        listening = 0
 
-    config = get_config()
-    try:
-        if ONLINE_CHANNEL_ID:
+        for member in guild.members:
+            if member.bot:
+                continue
+
+            if member.status != discord.Status.offline:
+                online += 1
+
+            if member.voice and member.voice.channel:
+                in_voice += 1
+
+            activity = member.activity
+            if activity and isinstance(activity, discord.Spotify):
+                listening += 1
+
+        print(f"Updated counts — Online: {online}, In Voice: {in_voice}, Listening: {listening}")
+
+        try:
             online_channel = guild.get_channel(ONLINE_CHANNEL_ID)
-            if online_channel and online_channel.name != f"🟢 Online: {online}":
-                await online_channel.edit(name=f"🟢 Online: {online}")
-        if VC_CHANNEL_ID:
-            voice_channel = guild.get_channel(VC_CHANNEL_ID)
-            if voice_channel and voice_channel.name != f"🔊 In Voice: {in_voice}":
-                await voice_channel.edit(name=f"🔊 In Voice: {in_voice}")
-        if MUSIC_CHANNEL_ID:
+            vc_channel = guild.get_channel(VC_CHANNEL_ID)
             music_channel = guild.get_channel(MUSIC_CHANNEL_ID)
-            if music_channel and music_channel.name != f"🎧 Listening: {listening}":
-                await music_channel.edit(name=f"🎧 Listening: {listening}")
-    except discord.Forbidden:
-        print("Missing permissions to edit channel names.")
-    except Exception as e:
-        print(f"Error updating channels: {e}")
 
-@bot.command(name="status")
-async def status(ctx):
-    guild = bot.get_guild(GUILD_ID)
-    if guild is None:
-        await ctx.send("Guild not found.")
+            if online_channel:
+                await online_channel.edit(name=f"🟢 Online: {online}")
+            if vc_channel:
+                await vc_channel.edit(name=f"🔊 In Voice: {in_voice}")
+            if music_channel:
+                await music_channel.edit(name=f"🎧 Music: {listening}")
+        except Exception as e:
+            print(f"Error updating channels: {e}")
+
+        await asyncio.sleep(60)
+
+@client.event
+async def on_ready():
+    print(f"{client.user} is now running.")
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀"))
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
         return
 
-    online = 0
-    in_voice = 0
-    listening = 0
+    if message.content == "/status":
+        guild = message.guild
+        online = 0
+        in_voice = 0
+        listening = 0
 
-    for member in guild.members:
-        if member.bot:
-            continue
-        if member.status != discord.Status.offline:
-            online += 1
-        if member.voice and member.voice.channel:
-            in_voice += 1
-        if member.activities:
-            for activity in member.activities:
-                if isinstance(activity, discord.Spotify):
-                    listening += 1
-                    break
+        for member in guild.members:
+            if member.bot:
+                continue
 
-    embed = discord.Embed(
-        title="Server Activity",
-        description=f"🟢 Online Members: `{online}`\n🔊 In Voice Channels: `{in_voice}`\n🎧 Listening to Music: `{listening}`",
-        color=discord.Color.blue()
-    )
-    await ctx.send(embed=embed)
+            if member.status != discord.Status.offline:
+                online += 1
 
-bot.run(TOKEN)
+            if member.voice and member.voice.channel:
+                in_voice += 1
+
+            activity = member.activity
+            if activity and isinstance(activity, discord.Spotify):
+                listening += 1
+
+        await message.channel.send(
+            f"🟢 Online: {online}\n🔊 In Voice: {in_voice}\n🎧 Listening to Music: {listening}"
+        )
+
+client.loop.create_task(update_channels())
+client.run(TOKEN)
