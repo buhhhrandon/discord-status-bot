@@ -53,7 +53,6 @@ Safe, lightweight, and easy to deploy anywhere.
    VC_CHANNEL_ID=channel-id-for-voice
    MUSIC_CHANNEL_ID=channel-id-for-music
 
-
 3. **Edit `config.json`** with your channel IDs:
    ```json
    {
