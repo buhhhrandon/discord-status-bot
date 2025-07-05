@@ -1,10 +1,7 @@
 import discord
 import asyncio
-import json
 import os
-from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from datetime import datetime, timezone
 
 load_dotenv()
 
@@ -20,69 +17,79 @@ intents.members = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+class StatusTracker(discord.Client):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.online_channel = None
+        self.vc_channel = None
+        self.music_channel = None
+        self.last_online_name = ""
+        self.last_vc_name = ""
+        self.last_music_name = ""
 
-def get_config():
-    with open("config.json") as f:
-        return json.load(f)
+    async def on_ready(self):
+        print(f"{self.user} is online!")
 
-@bot.event
-async def on_ready():
-    print(f"{bot.user} is online!")
-    await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
-    update_status.start()
+        guild = self.get_guild(GUILD_ID)
+        self.online_channel = guild.get_channel(ONLINE_CHANNEL_ID)
+        self.vc_channel = guild.get_channel(VC_CHANNEL_ID)
+        self.music_channel = guild.get_channel(MUSIC_CHANNEL_ID)
 
-last_counts = {
-    "online": None,
-    "in_voice": None,
-    "listening": None
-}
+        # Set bot presence
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀"))
 
-@tasks.loop(seconds=60)
-async def update_status():
-    guild = bot.get_guild(GUILD_ID)
-    if guild is None:
-        print("❌ Guild not found.")
-        return
+        while True:
+            await self.update_status(guild)
+            await asyncio.sleep(60)
 
-    online = 0
-    in_voice = 0
-    listening = 0
+    async def update_status(self, guild):
+        online = 0
+        in_voice = 0
+        listening = 0
 
-    for member in guild.members:
-        if member.bot:
-            continue
-        if member.status != discord.Status.offline:
-            online += 1
-        if member.voice and member.voice.channel:
-            in_voice += 1
-        if member.activities:
-            for activity in member.activities:
-                if isinstance(activity, discord.Spotify):
-                    listening += 1
-                    break
+        for member in guild.members:
+            if member.bot:
+                continue
+            if member.status != discord.Status.offline:
+                online += 1
+            if member.voice and member.voice.channel:
+                in_voice += 1
+            if member.activity and getattr(member.activity, 'type', None) == discord.ActivityType.listening:
+                listening += 1
 
-    if (online == last_counts["online"] and
-        in_voice == last_counts["in_voice"] and
-        listening == last_counts["listening"]):
-        print("No change in status — skipping update.")
-        return
+        # Compose new names
+        online_name = f"🟢 {online} Online"
+        vc_name = f"🎙️ {in_voice} In Voice"
+        music_name = f"🎧 {listening} Listening to Music"
 
-    try:
-        await bot.get_channel(ONLINE_CHANNEL_ID).edit(name=f"🟢 {online} Online")
-        await bot.get_channel(VC_CHANNEL_ID).edit(name=f"🎙️ {in_voice} In Voice")
-        await bot.get_channel(MUSIC_CHANNEL_ID).edit(name=f"🎧 {listening} Listening to Music")
+        updated = False
 
-        print(f"✅ Updated: 🟢 {online} | 🎙️ {in_voice} | 🎧 {listening}")
-        last_counts["online"] = online
-        last_counts["in_voice"] = in_voice
-        last_counts["listening"] = listening
+        # Update if names changed
+        if self.online_channel and online_name != self.last_online_name:
+            await self.safe_edit(self.online_channel, online_name)
+            self.last_online_name = online_name
+            updated = True
 
-    except discord.errors.HTTPException as e:
-        if e.status == 429:
-            retry = e.response.headers.get("Retry-After")
-            print(f"⚠️ Rate limit hit. Retry After: {retry}s")
+        if self.vc_channel and vc_name != self.last_vc_name:
+            await self.safe_edit(self.vc_channel, vc_name)
+            self.last_vc_name = vc_name
+            updated = True
+
+        if self.music_channel and music_name != self.last_music_name:
+            await self.safe_edit(self.music_channel, music_name)
+            self.last_music_name = music_name
+            updated = True
+
+        if updated:
+            print(f"✅ Updated: {online_name} | {vc_name} | {music_name}")
         else:
-            print(f"❌ HTTP Error: {e}")
+            print("No change in status — skipping update.")
 
-bot.run(TOKEN)
+    async def safe_edit(self, channel, new_name):
+        try:
+            await channel.edit(name=new_name)
+        except discord.HTTPException as e:
+            print(f"⚠️ Rate limited or failed to edit {channel.id}: {e}")
+
+client = StatusTracker(intents=intents)
+client.run(TOKEN)
