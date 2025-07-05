@@ -40,7 +40,7 @@ def get_stats(guild):
 async def on_ready():
     print(f"{bot.user} is online!")
 
-    activity = discord.Activity(type=discord.ActivityType.watching, name="Online and tracking 🚀")
+    activity = discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀")
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
     update_voice_channel.start()
