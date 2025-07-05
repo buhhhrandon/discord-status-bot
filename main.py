@@ -7,7 +7,9 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID"))
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
+ONLINE_CHANNEL_ID = int(os.getenv("ONLINE_CHANNEL_ID"))
+VC_CHANNEL_ID = int(os.getenv("VC_CHANNEL_ID"))
+MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
 
 intents = discord.Intents.default()
 intents.presences = True
@@ -37,7 +39,6 @@ def get_stats(guild):
 
 
 def normalize(text):
-    # remove spaces, tabs, newlines, and normalize emoji formatting
     return ''.join(text.strip().split())
 
 
@@ -48,31 +49,38 @@ async def on_ready():
     activity = discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀")
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
-    update_voice_channel.start()
+    update_voice_channels.start()
 
 
-@tasks.loop(seconds=60)  # safer interval to avoid rate limits
-async def update_voice_channel():
+@tasks.loop(seconds=60)
+async def update_voice_channels():
     guild = bot.get_guild(GUILD_ID)
-    channel = guild.get_channel(CHANNEL_ID)
-    if not channel:
-        print("Voice channel not found.")
+    if not guild:
+        print("Guild not found.")
         return
 
     online, in_voice, listening = get_stats(guild)
 
-    new_name = f"🟢 {online} Online | 🔊 {in_voice} VC | 🎧 {listening} Music"
+    updates = [
+        (ONLINE_CHANNEL_ID, f"🟢 {online} Online"),
+        (VC_CHANNEL_ID, f"🔊 {in_voice} VC"),
+        (MUSIC_CHANNEL_ID, f"🎧 {listening} Music")
+    ]
 
-    print(f"Current: {channel.name} | New: {new_name}")
+    for channel_id, new_name in updates:
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            print(f"Channel ID {channel_id} not found.")
+            continue
 
-    if normalize(channel.name) != normalize(new_name):
-        try:
-            await channel.edit(name=new_name)
-            print(f"✅ Updated voice channel name to: {new_name}")
-        except discord.errors.HTTPException as e:
-            print(f"⚠️ Rate limited or failed to update channel name: {e}")
-    else:
-        print("No change in stats — skipping channel update.")
+        if normalize(channel.name) != normalize(new_name):
+            try:
+                await channel.edit(name=new_name)
+                print(f"✅ Updated: {new_name}")
+            except discord.errors.HTTPException as e:
+                print(f"⚠️ Failed to update {channel.name}: {e}")
+        else:
+            print(f"No change in {channel.name} — skipping.")
 
 
 @bot.tree.command(name="status", description="Show server activity (online, in voice, listening to music)")
