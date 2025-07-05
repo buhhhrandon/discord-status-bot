@@ -1,68 +1,110 @@
 import discord
-from discord import app_commands
-import asyncio
+from discord.ext import commands, tasks
 import os
-from datetime import datetime, timezone
+from dotenv import load_dotenv
+import time
 
-intents = discord.Intents.default()
-intents.guilds = True
-intents.members = True
-intents.presences = True
-intents.voice_states = True
+load_dotenv()
 
-class StatusTracker(discord.Client):
-    def __init__(self):
-        super().__init__(intents=intents)
-        self.tree = app_commands.CommandTree(self)
-        self.guild_id = int(os.getenv("GUILD_ID"))
-        self.vc_channel_id = int(os.getenv("VC_CHANNEL_ID"))
-        self.music_channel_id = int(os.getenv("MUSIC_CHANNEL_ID"))
-        self.online_channel_id = int(os.getenv("ONLINE_CHANNEL_ID"))
-        self.update_interval = 60  # in seconds
-        self.last_stats = {"online": 0, "voice": 0, "listening": 0}
-
-    async def setup_hook(self):
-        guild = discord.Object(id=self.guild_id)
-        self.tree.copy_global_to(guild=guild)
-        await self.tree.sync(guild=guild)
-
-    async def on_ready(self):
-        print(f"{self.user} is online!")
-        self.loop.create_task(self.update_channels_loop())
-
-    async def update_channels_loop(self):
-        await self.wait_until_ready()
-        guild = self.get_guild(self.guild_id)
-
-        while not self.is_closed():
-            online = sum(1 for m in guild.members if not m.bot and m.status != discord.Status.offline)
-            in_voice = sum(1 for vc in guild.voice_channels for m in vc.members if not m.bot)
-            listening = sum(1 for m in guild.members if not m.bot and m.activities and any(a.type == discord.ActivityType.listening for a in m.activities))
-
-            # compare to last stats
-            if (online, in_voice, listening) != tuple(self.last_stats.values()):
-                try:
-                    if online != self.last_stats["online"]:
-                        await self.update_channel_name(self.online_channel_id, f"🟢 {online} Online")
-                        self.last_stats["online"] = online
-
-                    if in_voice != self.last_stats["voice"]:
-                        await self.update_channel_name(self.vc_channel_id, f"🎙️ {in_voice} In Voice")
-                        self.last_stats["voice"] = in_voice
-
-                    if listening != self.last_stats["listening"]:
-                        await self.update_channel_name(self.music_channel_id, f"🎧 {listening} Listening to Music")
-                        self.last_stats["listening"] = listening
-                except discord.HTTPException as e:
-                    print(f"[{datetime.now()}] Rate limited or error: {e}")
-
-            await asyncio.sleep(self.update_interval)
-
-    async def update_channel_name(self, channel_id, name):
-        channel = self.get_channel(channel_id)
-        if channel and channel.name != name:
-            await channel.edit(name=name)
-
-client = StatusTracker()
 TOKEN = os.getenv("DISCORD_TOKEN")
-client.run(TOKEN)
+GUILD_ID = int(os.getenv("GUILD_ID"))
+ONLINE_CHANNEL_ID = int(os.getenv("ONLINE_CHANNEL_ID"))
+VC_CHANNEL_ID = int(os.getenv("VC_CHANNEL_ID"))
+MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
+
+# Enable all intents to ensure presence/activity tracking works
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+def get_stats(guild):
+    online = 0
+    in_voice = 0
+    listening = 0
+
+    for member in guild.members:
+        if member.bot:
+            continue
+        if member.status in [discord.Status.online, discord.Status.idle, discord.Status.dnd]:
+            online += 1
+        if member.voice and member.voice.channel:
+            in_voice += 1
+        if member.activity and member.activity.type == discord.ActivityType.listening:
+            listening += 1
+
+    return online, in_voice, listening
+
+
+@bot.event
+async def on_ready():
+    print(f"{bot.user} is online!")
+
+    activity = discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀")
+    await bot.change_presence(status=discord.Status.online, activity=activity)
+
+    update_voice_channels.start()
+
+
+@tasks.loop(seconds=60)
+async def update_voice_channels():
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Guild not found.")
+        return
+
+    online, in_voice, listening = get_stats(guild)
+
+    channel_data = [
+        (ONLINE_CHANNEL_ID, f"🟢 {online} Online"),
+        (VC_CHANNEL_ID, f"🎙️ {in_voice} In Voice"),
+        (MUSIC_CHANNEL_ID, f"🎧 {listening} Listening to Music"),
+    ]
+
+    for channel_id, new_name in channel_data:
+        channel = guild.get_channel(channel_id)
+        if not channel:
+            print(f"Channel ID {channel_id} not found.")
+            continue
+
+        if channel.name.strip() != new_name.strip():
+            try:
+                await channel.edit(name=new_name)
+                print(f"Updated {channel.name} → {new_name}")
+            except discord.errors.HTTPException as e:
+                print(f"⚠️ Rate limit or error updating channel {channel_id}: {e}")
+                if hasattr(e.response, "headers"):
+                    headers = e.response.headers
+                    print(f"Headers:\n"
+                          f"  X-RateLimit-Limit: {headers.get('X-RateLimit-Limit')}\n"
+                          f"  X-RateLimit-Remaining: {headers.get('X-RateLimit-Remaining')}\n"
+                          f"  X-RateLimit-Reset: {headers.get('X-RateLimit-Reset')}\n"
+                          f"  X-RateLimit-Reset-After: {headers.get('X-RateLimit-Reset-After')}\n"
+                          f"  X-RateLimit-Scope: {headers.get('X-RateLimit-Scope')}\n"
+                          f"  retry_after: {headers.get('retry_after')}")
+                await discord.utils.sleep_until(discord.utils.utcnow() + discord.utils.timedelta(seconds=10))
+        else:
+            print(f"No change in {channel.name} — skipped update.")
+
+
+@bot.tree.command(name="status", description="Show server activity (online, in voice, listening to music)")
+async def status(interaction: discord.Interaction):
+    await interaction.response.defer()
+    guild = interaction.guild
+
+    online, in_voice, listening = get_stats(guild)
+
+    await interaction.followup.send(
+        f"**StatusTracker**\n"
+        f"🟢 Online: **{online}**\n"
+        f"🎙️ In Voice: **{in_voice}**\n"
+        f"🎧 Listening to Music: **{listening}**"
+    )
+
+
+@bot.event
+async def setup_hook():
+    bot.tree.copy_global_to(guild=discord.Object(id=GUILD_ID))
+    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+
+
+bot.run(TOKEN)
