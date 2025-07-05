@@ -1,9 +1,9 @@
-
 import discord
+import asyncio
+import json
 import os
-from discord.ext import tasks
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone
 
 load_dotenv()
 
@@ -19,62 +19,94 @@ intents.members = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = discord.Bot(intents=intents)
+bot = commands.Bot(command_prefix='/', intents=intents)
 
-previous_counts = {
-    "online": None,
-    "vc": None,
-    "music": None
-}
+def get_config():
+    with open("config.json") as f:
+        return json.load(f)
+
+def save_config(config):
+    with open("config.json", "w") as f:
+        json.dump(config, f, indent=4)
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} is online and ready.")
-    update_stats.start()
+    print(f"Logged in as {bot.user.name}")
+    await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
+    update_channels.start()
 
-@bot.slash_command(name="status", description="Check live member stats")
-async def status(ctx):
+@tasks.loop(minutes=2)
+async def update_channels():
     guild = bot.get_guild(GUILD_ID)
-    if guild:
-        online = sum(1 for m in guild.members if not m.bot and m.status != discord.Status.offline)
-        vc = sum(1 for vc in guild.voice_channels for m in vc.members if not m.bot)
-        music = sum(1 for m in guild.members if getattr(m.activity, "type", None) == discord.ActivityType.listening)
-        await ctx.respond(f"🟢 Online: {online}, 🔊 VC: {vc}, 🎧 Music: {music}")
-    else:
-        await ctx.respond("Guild not found.")
-
-@tasks.loop(minutes=1)
-async def update_stats():
-    guild = bot.get_guild(GUILD_ID)
-    if not guild:
+    if guild is None:
         print("Guild not found.")
         return
 
-    online = sum(1 for m in guild.members if not m.bot and m.status != discord.Status.offline)
-    vc = sum(1 for vc in guild.voice_channels for m in vc.members if not m.bot)
-    music = sum(1 for m in guild.members if getattr(m.activity, "type", None) == discord.ActivityType.listening)
+    online = 0
+    in_voice = 0
+    listening = 0
 
-    print(f"[Check] Online: {online}, VC: {vc}, Music: {music}")
+    for member in guild.members:
+        if member.bot:
+            continue
+        if member.status != discord.Status.offline:
+            online += 1
+        if member.voice and member.voice.channel:
+            in_voice += 1
+        if member.activities:
+            for activity in member.activities:
+                if isinstance(activity, discord.Spotify):
+                    listening += 1
+                    break
 
-    if previous_counts["online"] != online:
-        channel = guild.get_channel(ONLINE_CHANNEL_ID)
-        if channel:
-            await channel.edit(name=f"🟢 Online: {online}")
-            print(f"[Update] Online updated to {online}")
-        previous_counts["online"] = online
+    config = get_config()
+    try:
+        if ONLINE_CHANNEL_ID:
+            online_channel = guild.get_channel(ONLINE_CHANNEL_ID)
+            if online_channel and online_channel.name != f"🟢 Online: {online}":
+                await online_channel.edit(name=f"🟢 Online: {online}")
+        if VC_CHANNEL_ID:
+            voice_channel = guild.get_channel(VC_CHANNEL_ID)
+            if voice_channel and voice_channel.name != f"🔊 In Voice: {in_voice}":
+                await voice_channel.edit(name=f"🔊 In Voice: {in_voice}")
+        if MUSIC_CHANNEL_ID:
+            music_channel = guild.get_channel(MUSIC_CHANNEL_ID)
+            if music_channel and music_channel.name != f"🎧 Listening: {listening}":
+                await music_channel.edit(name=f"🎧 Listening: {listening}")
+    except discord.Forbidden:
+        print("Missing permissions to edit channel names.")
+    except Exception as e:
+        print(f"Error updating channels: {e}")
 
-    if previous_counts["vc"] != vc:
-        channel = guild.get_channel(VC_CHANNEL_ID)
-        if channel:
-            await channel.edit(name=f"🔊 VC: {vc}")
-            print(f"[Update] Voice updated to {vc}")
-        previous_counts["vc"] = vc
+@bot.command(name="status")
+async def status(ctx):
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        await ctx.send("Guild not found.")
+        return
 
-    if previous_counts["music"] != music:
-        channel = guild.get_channel(MUSIC_CHANNEL_ID)
-        if channel:
-            await channel.edit(name=f"🎧 Music: {music}")
-            print(f"[Update] Music updated to {music}")
-        previous_counts["music"] = music
+    online = 0
+    in_voice = 0
+    listening = 0
+
+    for member in guild.members:
+        if member.bot:
+            continue
+        if member.status != discord.Status.offline:
+            online += 1
+        if member.voice and member.voice.channel:
+            in_voice += 1
+        if member.activities:
+            for activity in member.activities:
+                if isinstance(activity, discord.Spotify):
+                    listening += 1
+                    break
+
+    embed = discord.Embed(
+        title="Server Activity",
+        description=f"🟢 Online Members: `{online}`\n🔊 In Voice Channels: `{in_voice}`\n🎧 Listening to Music: `{listening}`",
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
 
 bot.run(TOKEN)
