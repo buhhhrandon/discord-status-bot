@@ -1,5 +1,6 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
+from discord import app_commands
 import os
 from dotenv import load_dotenv
 
@@ -17,10 +18,19 @@ intents.members = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+class StatusBot(discord.Client):
+    def __init__(self):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+        self.last_channel_names = {}
 
-# Cache to store last known channel names to prevent unnecessary edits
-last_channel_names = {}
+    async def setup_hook(self):
+        guild = discord.Object(id=GUILD_ID)
+        self.tree.copy_global_to(guild=guild)
+        await self.tree.sync(guild=guild)
+        update_voice_channels.start(self)
+
+bot = StatusBot()
 
 def get_stats(guild):
     online = 0
@@ -42,14 +52,11 @@ def get_stats(guild):
 @bot.event
 async def on_ready():
     print(f"{bot.user} is online!")
-
     activity = discord.Activity(type=discord.ActivityType.watching, name="tracking activity 🚀")
     await bot.change_presence(status=discord.Status.online, activity=activity)
 
-    update_voice_channels.start()
-
 @tasks.loop(seconds=60)
-async def update_voice_channels():
+async def update_voice_channels(bot):
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         print("Guild not found.")
@@ -69,19 +76,31 @@ async def update_voice_channels():
             print(f"Channel ID {channel_id} not found.")
             continue
 
-        # Only update if name actually changed
-        if last_channel_names.get(channel_id) == new_name:
-            print(f"No change for {channel.name} — skipping update.")
+        if bot.last_channel_names.get(channel_id) == new_name:
+            print(f"No change in {channel.name} — skipping.")
             continue
 
         try:
             await channel.edit(name=new_name)
-            last_channel_names[channel_id] = new_name
-            print(f"✅ Updated channel {channel.name} to: {new_name}")
-        except discord.errors.HTTPException as e:
-            print(f"⚠️ Failed to update {channel.name}: {e}")
+            bot.last_channel_names[channel_id] = new_name
+            print(f"✅ Updated: {new_name}")
+        except discord.HTTPException as e:
+            print(f"⚠️ Error updating {channel.name}: {e}")
 
-@bot.tree.command(name="status", description="Show server activity (online, in voice, listening to music)")
-async def status(interaction: discord.Interaction):
+@bot.tree.command(name="status", description="Show server activity stats")
+async def status_command(interaction: discord.Interaction):
     await interaction.response.defer()
     guild = interaction.guild
+    if not guild:
+        await interaction.followup.send("This command must be used in a server.")
+        return
+
+    online, in_voice, listening = get_stats(guild)
+    msg = (
+        f"🟢 **Online Members:** {online}\n"
+        f"🔊 **In Voice Channels:** {in_voice}\n"
+        f"🎧 **Listening to Music:** {listening}"
+    )
+    await interaction.followup.send(msg)
+
+bot.run(TOKEN)
