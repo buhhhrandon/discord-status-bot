@@ -8,6 +8,11 @@
 ![Forks](https://img.shields.io/github/forks/buhhhrandon/discord-status-bot)
 [![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-black?logo=railway&style=flat)](https://railway.app)
 
+---
+
+## 🤖 Add to Your Server
+
+[![Add Bot to Server](https://img.shields.io/badge/Invite%20Bot-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1390854957195985029&permissions=274878221504&scope=bot%20applications.commands)
 
 ---
 
