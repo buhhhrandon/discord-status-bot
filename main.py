@@ -94,6 +94,6 @@ async def ping_command(interaction: discord.Interaction):
     await interaction.response.send_message("pong!")
 
 # Debug print to show registered commands after defining them
-print("Commands registered:", bot.tree.commands)
+print("Commands registered:", [cmd.name for cmd in bot.tree.walk_commands()])
 
 bot.run(TOKEN)
