@@ -20,6 +20,11 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Store last known counts to avoid unnecessary updates
+last_online = None
+last_in_voice = None
+last_listening = None
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
@@ -37,8 +42,10 @@ def count_activity(guild):
     listening = sum(1 for m in guild.members if not m.bot and m.activities and any(isinstance(a, discord.Spotify) for a in m.activities))
     return online, in_voice, listening
 
-@tasks.loop(seconds=60)
+@tasks.loop(seconds=600)
 async def update_channels():
+    global last_online, last_in_voice, last_listening
+
     guild = bot.get_guild(GUILD_ID)
     if not guild:
         print("Guild not found.")
@@ -46,10 +53,20 @@ async def update_channels():
 
     online, in_voice, listening = count_activity(guild)
 
+    print(f"Activity counts - Online: {online}, In Voice: {in_voice}, Listening: {listening}")
+
+    # Only update if counts changed
+    if (online, in_voice, listening) == (last_online, last_in_voice, last_listening):
+        print("No changes detected, skipping channel updates.")
+        return
+
     try:
         await guild.get_channel(ONLINE_CHANNEL_ID).edit(name=f"🟢 Online: {online}")
         await guild.get_channel(VC_CHANNEL_ID).edit(name=f"🔊 In Voice: {in_voice}")
         await guild.get_channel(MUSIC_CHANNEL_ID).edit(name=f"🎵 Listening to Music: {listening}")
+        print("Channel names updated successfully.")
+        # Update last known counts
+        last_online, last_in_voice, last_listening = online, in_voice, listening
     except Exception as e:
         print(f"Error updating channel names: {e}")
 
