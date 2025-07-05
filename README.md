@@ -3,6 +3,11 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/buhhhrandon/discord-status-bot)](https://github.com/buhhhrandon/discord-status-bot)
 [![Python Version](https://img.shields.io/badge/python-3.12-%23000000)](https://www.python.org/)
+![Issues](https://img.shields.io/github/issues/buhhhrandon/discord-status-bot)
+![Stars](https://img.shields.io/github/stars/buhhhrandon/discord-status-bot)
+![Forks](https://img.shields.io/github/forks/buhhhrandon/discord-status-bot)
+[![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-black?logo=railway&style=flat)](https://railway.app)
+
 
 ---
 
