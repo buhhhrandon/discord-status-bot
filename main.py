@@ -43,7 +43,7 @@ def count_activity(guild):
     listening = sum(1 for m in guild.members if not m.bot and m.activities and any(isinstance(a, discord.Spotify) for a in m.activities))
     return online, in_voice, listening
 
-@tasks.loop(seconds=420)
+@tasks.loop(seconds=300)
 async def update_channels():
     global last_online, last_in_voice, last_listening
 
