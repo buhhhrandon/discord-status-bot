@@ -46,10 +46,13 @@ Safe, lightweight, and easy to deploy anywhere.
    ```
 
 2. **Create a `.env` file** based on `.env.example`
-   ```
-   DISCORD_TOKEN=your_bot_token
-   GUILD_ID=your_server_id
-   ```
+   ```env
+   DISCORD_TOKEN=your-bot-token-here
+   GUILD_ID=your-discord-server-id
+   ONLINE_CHANNEL_ID=channel-id-for-online
+   VC_CHANNEL_ID=channel-id-for-voice
+   MUSIC_CHANNEL_ID=channel-id-for-music
+
 
 3. **Edit `config.json`** with your channel IDs:
    ```json
