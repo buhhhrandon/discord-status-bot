@@ -28,7 +28,10 @@ last_listening = None
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    await bot.change_presence(activity=discord.Game(name="tracking activity 🚀"))
+    await bot.change_presence(
+        status=discord.Status.dnd,
+        activity=discord.Game(name="tracking activity 🚀")
+    )
     update_channels.start()
     try:
         # Sync globally (remove guild arg)
