@@ -25,7 +25,7 @@ A simple Discord bot that updates designated voice channel names with live serve
 
 It now also includes **automated DM reminders** to help keep your **Active Developer badge** active by reminding you to use `/status` every 25 days (12:00 PM Dallas time).
 
-Lightweight, safe, and easy to deploy anywhere.
+Lightweight, safe, and easy to deploy anywhere — whether on **Railway** or **locally**.
 
 ---
 
@@ -48,37 +48,6 @@ Lightweight, safe, and easy to deploy anywhere.
 | `/status` | View current online, voice, and music counts | Everyone |
 | `/ping` | Simple test to check if the bot responds | Everyone |
 | `/remindme` | DM the owner a `/status` reminder now | Owner only |
-
----
-
-## 📦 Installation (Manual / Local)
-
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/buhhhrandon/discord-status-bot.git
-   cd discord-status-bot
-   ```
-
-2. **Create a `.env` file**
-   ```env
-   DISCORD_TOKEN=your-bot-token-here
-   GUILD_ID=your-server-id
-   ONLINE_CHANNEL_ID=channel-id-for-online
-   VC_CHANNEL_ID=channel-id-for-voice
-   MUSIC_CHANNEL_ID=channel-id-for-music
-   OWNER_ID=your-discord-user-id
-   ADMIN_CHANNEL_ID=optional-fallback-channel-id
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run the bot**
-   ```bash
-   python main.py
-   ```
 
 ---
 
@@ -123,6 +92,50 @@ This keeps your reminder history (`last_status_reminder.json`) so you don’t ge
 
 ---
 
+## 🖥️ Local Setup (Optional)
+
+If you prefer to host the bot on your own computer instead of Railway:
+
+1. **Clone the repo**
+   ```bash
+   git clone https://github.com/buhhhrandon/discord-status-bot.git
+   cd discord-status-bot
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Create a `.env` file**
+   ```env
+   DISCORD_TOKEN=your-bot-token-here
+   GUILD_ID=your-discord-server-id
+   ONLINE_CHANNEL_ID=channel-id-for-online
+   VC_CHANNEL_ID=channel-id-for-voice
+   MUSIC_CHANNEL_ID=channel-id-for-music
+   OWNER_ID=your-discord-user-id
+   ADMIN_CHANNEL_ID=optional-fallback-channel-id
+   ```
+
+4. **(Optional)** Create a folder for reminder storage:
+   ```bash
+   mkdir data
+   ```
+   The bot saves reminder data here (like `/data` on Railway).
+
+5. **Run the bot**
+   ```bash
+   python main.py
+   ```
+
+> 💡 Tip: If you want to force a reminder right away for testing, add this line to your `.env` file:
+> ```
+> FORCE_STARTUP_REMINDER=1
+> ```
+
+---
+
 ## 🕒 Reminder Schedule (Dallas / America Chicago)
 
 | Event | Action |
@@ -140,6 +153,7 @@ This keeps your reminder history (`last_status_reminder.json`) so you don’t ge
 - All timestamps use **UTC internally** but reminders align to **America/Chicago** (Dallas time).  
 - `.env` is ignored in GitHub — your bot token stays secure.  
 - Forks of this repo won’t affect your hosted bot; only your instance with your token can send DMs.  
+- Works seamlessly on **Railway**, but can also be run **locally** for testing or personal hosting.
 
 ---
 
