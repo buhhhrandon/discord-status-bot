@@ -2,7 +2,8 @@ import discord
 import asyncio
 import os
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time as dtime
+from zoneinfo import ZoneInfo
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -14,15 +15,19 @@ GUILD_ID = int(os.getenv("GUILD_ID"))
 ONLINE_CHANNEL_ID = int(os.getenv("ONLINE_CHANNEL_ID"))
 VC_CHANNEL_ID = int(os.getenv("VC_CHANNEL_ID"))
 MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
-OWNER_ID = int(os.getenv("OWNER_ID", "96749215761338368"))  # <-- Your Discord USER ID (not the bot)
+OWNER_ID = int(os.getenv("OWNER_ID", "96749215761338368"))  # your Discord USER ID
 
 # Optional fallback: channel to ping if DMs are closed (e.g., a private admin channel)
 ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID", "0"))
 
+# Timezone fixed to Dallas, TX
+LOCAL_TZ = ZoneInfo("America/Chicago")
+
 # ====== REMINDER SETTINGS ======
 REMINDER_FILE = "/data/last_status_reminder.json"  # mount a Railway volume at /data
 REMINDER_INTERVAL = timedelta(days=25)
-INITIAL_COOLDOWN = timedelta(hours=20)  # avoids spam if you redeploy repeatedly in one day
+INITIAL_COOLDOWN = timedelta(hours=20)        # avoids spam if you redeploy repeatedly in one day
+RECENT_SEND_WINDOW = timedelta(minutes=5)     # dedupe guard
 
 intents = discord.Intents.default()
 intents.presences = True
@@ -36,6 +41,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 last_online = None
 last_in_voice = None
 last_listening = None
+
+# Lock is created in on_ready() to bind to the running loop
+reminder_lock: asyncio.Lock | None = None
 
 
 # ====== Reminder helpers ======
@@ -60,47 +68,60 @@ def save_last_reminder(dt: datetime):
 
 async def send_reminder(reason: str = "scheduled"):
     """DM the owner a /status reminder (and fall back to channel if DM fails)."""
-    if not OWNER_ID:
-        print("OWNER_ID not set; cannot send reminder.")
-        return
+    global reminder_lock
+    if reminder_lock is None:
+        reminder_lock = asyncio.Lock()
 
-    msg = (
-        "⏰ **/status reminder**\n"
-        "To keep the **Active Developer** badge, a *user* must run a slash command "
-        "from this bot at least once every 30 days.\n\n"
-        "Please run `/status` in your server."
-    )
-    try:
-        user = await bot.fetch_user(OWNER_ID)
-        await user.send(msg)
-        save_last_reminder(datetime.now(timezone.utc))
-        print(f"Sent {reason} reminder DM to owner.")
-    except Exception as e:
-        print(f"Failed to DM owner: {e}")
-        if ADMIN_CHANNEL_ID:
-            try:
-                ch = bot.get_channel(ADMIN_CHANNEL_ID)
-                if ch:
-                    await ch.send(f"<@{OWNER_ID}> {msg}")
-                    save_last_reminder(datetime.now(timezone.utc))
-                    print(f"Sent {reason} reminder in fallback channel.")
-            except Exception as ee:
-                print(f"Fallback channel send failed: {ee}")
+    async with reminder_lock:
+        if not OWNER_ID:
+            print("OWNER_ID not set; cannot send reminder.")
+            return
+
+        now = datetime.now(timezone.utc)
+        last = load_last_reminder()
+
+        # Dedupe: if something else just sent one moments ago, skip
+        if last and (now - last) < RECENT_SEND_WINDOW:
+            print("Reminder suppressed: recent send detected.")
+            return
+
+        msg = (
+            "⏰ **/status reminder**\n"
+            "To keep the **Active Developer** badge, a *user* must run a slash command "
+            "from this bot at least once every 30 days.\n\n"
+            "Please run `/status` in your server."
+        )
+        try:
+            user = await bot.fetch_user(OWNER_ID)
+            await user.send(msg)
+            save_last_reminder(now)
+            print(f"Sent {reason} reminder DM to owner.")
+        except Exception as e:
+            print(f"Failed to DM owner: {e}")
+            if ADMIN_CHANNEL_ID:
+                try:
+                    ch = bot.get_channel(ADMIN_CHANNEL_ID)
+                    if ch:
+                        await ch.send(f"<@{OWNER_ID}> {msg}")
+                        save_last_reminder(now)
+                        print(f"Sent {reason} reminder in fallback channel.")
+                except Exception as ee:
+                    print(f"Fallback channel send failed: {ee}")
 
 
-@tasks.loop(hours=24)
-async def reminder_loop():
-    """Checks daily; sends a DM if 25 days have passed since the last reminder."""
+# Run exactly at 12:00 PM America/Chicago every day; only send if >= 25 days elapsed
+@tasks.loop(time=dtime(12, 0, tzinfo=LOCAL_TZ))
+async def reminder_noon():
     now = datetime.now(timezone.utc)
     last = load_last_reminder()
     if last is None or now - last >= REMINDER_INTERVAL:
-        await send_reminder("25-day")
+        await send_reminder("noon/25-day")
 
 
-async def initial_reminder_today():
+async def initial_reminder_now():
     """
-    Sends a one-time reminder on startup (today), then the 25-day cycle takes over.
-    Uses a cooldown so redeploying repeatedly in the same day doesn't spam you.
+    Send one reminder immediately on startup (now), then noon schedule takes over.
+    Cooldown suppresses repeats on rapid redeploys.
     """
     now = datetime.now(timezone.utc)
     last = load_last_reminder()
@@ -113,6 +134,9 @@ async def initial_reminder_today():
 # ====== Bot logic ======
 @bot.event
 async def on_ready():
+    global reminder_lock
+    reminder_lock = asyncio.Lock()  # bind lock to this loop
+
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     await bot.change_presence(
         status=discord.Status.dnd,
@@ -120,13 +144,16 @@ async def on_ready():
     )
 
     update_channels.start()
-    reminder_loop.start()
-    await initial_reminder_today()  # <-- send a DM today, then every 25 days thereafter
+
+    # Send NOW, then start the noon-only scheduler
+    await initial_reminder_now()
+    reminder_noon.start()
 
     try:
         # Sync globally
         synced = await bot.tree.sync()
         print(f"Slash commands synced: {[cmd.name for cmd in synced]}")
+        print("Reminder timezone fixed to America/Chicago; noon job scheduled.")
     except Exception as e:
         print(f"Failed to sync slash commands: {e}")
 
