@@ -14,7 +14,7 @@ GUILD_ID = int(os.getenv("GUILD_ID"))
 ONLINE_CHANNEL_ID = int(os.getenv("ONLINE_CHANNEL_ID"))
 VC_CHANNEL_ID = int(os.getenv("VC_CHANNEL_ID"))
 MUSIC_CHANNEL_ID = int(os.getenv("MUSIC_CHANNEL_ID"))
-OWNER_ID = int(os.getenv("96749215761338368", "0"))  # <-- Your Discord USER ID (not the bot)
+OWNER_ID = int(os.getenv("OWNER_ID", "96749215761338368"))  # <-- Your Discord USER ID (not the bot)
 
 # Optional fallback: channel to ping if DMs are closed (e.g., a private admin channel)
 ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID", "0"))
