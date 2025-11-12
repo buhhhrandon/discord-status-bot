@@ -6,7 +6,7 @@
 ![Issues](https://img.shields.io/github/issues/buhhhrandon/discord-status-bot)
 ![Stars](https://img.shields.io/github/stars/buhhhrandon/discord-status-bot)
 ![Forks](https://img.shields.io/github/forks/buhhhrandon/discord-status-bot)
-[![Deploy on Railway](https://img.shields.io/badge/Deploy-Railway-black?logo=railway&style=flat)](https://railway.app)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/dyoiX9?referralCode=Z2DF-e&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 ---
 
@@ -84,13 +84,13 @@ Lightweight, safe, and easy to deploy anywhere.
 
 ## 🚀 One-Click Deploy (Railway)
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/buhhhrandon/discord-status-bot)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/dyoiX9?referralCode=Z2DF-e&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 > After clicking the button:
-> 1. Select your GitHub repo (or let Railway fork it).  
-> 2. Add the environment variables below.  
-> 3. Attach a Volume mounted at **`/data`** (for reminder persistence).  
-> 4. Deploy.
+> 1. Select your GitHub repo (or let Railway fork it).
+> 2. Add the environment variables below.
+> 3. Attach a Volume mounted at **`/data`** (for reminder persistence).
+> 4. Deploy and watch it go live.
 
 <details>
 <summary><b>🔑 Required Environment Variables</b></summary>
