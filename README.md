@@ -18,26 +18,40 @@
 
 ## 📝 About
 
-A simple Discord bot that updates designated voice channel names with real-time server stats:
-- 🟢 Online members
-- 🔊 In voice
-- 🎧 Listening to music
+A simple Discord bot that updates designated voice channel names with live server activity stats:
+- 🟢 Online members  
+- 🔊 In voice  
+- 🎧 Listening to music  
 
-Safe, lightweight, and easy to deploy anywhere.
+It now also includes **automated DM reminders** to help keep your **Active Developer badge** active by reminding you to use `/status` every 25 days (12:00 PM Dallas time).
+
+Lightweight, safe, and easy to deploy anywhere.
 
 ---
 
 ## 🚀 Features
 
-- Real-time live member status tracking  
-- Smart update intervals to avoid rate limits  
-- Multi-channel support  
-- Supports Railway, Replit, or local deployment  
-- `/status` command to manually check counts  
+- 🟢 Real-time member tracking (online / voice / Spotify)  
+- 💬 Auto DM reminders to the bot owner every 25 days (12 PM Dallas time)  
+- 💾 Persistent data storage using a Railway volume mounted at `/data`  
+- ⚙️ Owner-only `/remindme` command for manual reminders  
+- 🕐 Smart cooldown to avoid duplicate DMs  
+- ⚡ Rate-limit-aware channel updates  
+- 🛡 Secure — `.env` ignored in GitHub, secrets stored via Railway  
 
 ---
 
-## 📦 Installation
+## 🛠️ Commands
+
+| Command | Description | Access |
+|----------|--------------|--------|
+| `/status` | View current online, voice, and music counts | Everyone |
+| `/ping` | Simple test to check if the bot responds | Everyone |
+| `/remindme` | DM the owner a `/status` reminder now | Owner only |
+
+---
+
+## 📦 Installation (Manual / Local)
 
 1. **Clone the repo**
    ```bash
@@ -45,38 +59,87 @@ Safe, lightweight, and easy to deploy anywhere.
    cd discord-status-bot
    ```
 
-2. **Create a `.env` file** based on `.env.example`
+2. **Create a `.env` file**
    ```env
    DISCORD_TOKEN=your-bot-token-here
-   GUILD_ID=your-discord-server-id
+   GUILD_ID=your-server-id
    ONLINE_CHANNEL_ID=channel-id-for-online
    VC_CHANNEL_ID=channel-id-for-voice
    MUSIC_CHANNEL_ID=channel-id-for-music
-
-3. **Edit `config.json`** with your channel IDs:
-   ```json
-   {
-     "online": "channel_id_here",
-     "voice": "channel_id_here",
-     "music": "channel_id_here"
-   }
+   OWNER_ID=your-discord-user-id
+   ADMIN_CHANNEL_ID=optional-fallback-channel-id
    ```
 
-4. **Install dependencies**
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-5. **Run the bot**
+4. **Run the bot**
    ```bash
    python main.py
    ```
 
 ---
 
-## 🛠️ Commands
+## 🚀 One-Click Deploy (Railway)
 
-- `/status` — Manually check live counts (for admin/testing)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/buhhhrandon/discord-status-bot)
+
+> After clicking the button:
+> 1. Select your GitHub repo (or let Railway fork it).  
+> 2. Add the environment variables below.  
+> 3. Attach a Volume mounted at **`/data`** (for reminder persistence).  
+> 4. Deploy.
+
+<details>
+<summary><b>🔑 Required Environment Variables</b></summary>
+
+| Key | Example | Notes |
+|---|---|---|
+| `DISCORD_TOKEN` | `***` | Your bot token from the Discord Developer Portal |
+| `GUILD_ID` | `123456789012345678` | Your server ID |
+| `ONLINE_CHANNEL_ID` | `123456789012345678` | Channel for “🟢 Online” |
+| `VC_CHANNEL_ID` | `123456789012345678` | Channel for “🔊 In Voice” |
+| `MUSIC_CHANNEL_ID` | `123456789012345678` | Channel for “🎧 Listening to Music” |
+| `OWNER_ID` | `123456789012345678` | Your Discord user ID (for DMs) |
+| `ADMIN_CHANNEL_ID` *(optional)* | `123456789012345678` | Fallback channel if DMs are closed |
+
+> To copy IDs: Discord → *Settings > Advanced > Developer Mode ON* → right-click → **Copy ID**.
+
+</details>
+
+<details>
+<summary><b>💾 Persistent Storage</b></summary>
+
+Attach a **Volume**:
+- **Name:** anything (e.g., `bot-data`)  
+- **Mount Path:** `/data`  
+- **Size:** 100 MB +  
+
+This keeps your reminder history (`last_status_reminder.json`) so you don’t get duplicate or lost DMs across restarts.
+
+</details>
+
+---
+
+## 🕒 Reminder Schedule (Dallas / America Chicago)
+
+| Event | Action |
+|--------|--------|
+| **Bot startup** | Sends 1 DM (if no recent reminder or cooldown expired) |
+| **Every day @ 12:00 PM Dallas time** | Checks if ≥ 25 days since last reminder; sends if true |
+| **`/remindme` command** | Immediate DM to owner |
+| **`FORCE_STARTUP_REMINDER=1`** | Forces DM on next deploy, then resumes normal behavior |
+
+---
+
+## 🧠 Notes
+
+- You can reset the reminder state by **deleting or detaching your Railway volume**.  
+- All timestamps use **UTC internally** but reminders align to **America/Chicago** (Dallas time).  
+- `.env` is ignored in GitHub — your bot token stays secure.  
+- Forks of this repo won’t affect your hosted bot; only your instance with your token can send DMs.  
 
 ---
 
