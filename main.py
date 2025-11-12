@@ -20,6 +20,9 @@ OWNER_ID = int(os.getenv("OWNER_ID", "96749215761338368"))  # your Discord USER 
 # Optional fallback: channel to ping if DMs are closed (e.g., a private admin channel)
 ADMIN_CHANNEL_ID = int(os.getenv("ADMIN_CHANNEL_ID", "0"))
 
+# One-time override to force a startup DM on next boot (set to "1")
+FORCE_STARTUP_REMINDER = os.getenv("FORCE_STARTUP_REMINDER", "0") == "1"
+
 # Timezone fixed to Dallas, TX
 LOCAL_TZ = ZoneInfo("America/Chicago")
 
@@ -121,10 +124,15 @@ async def reminder_noon():
 async def initial_reminder_now():
     """
     Send one reminder immediately on startup (now), then noon schedule takes over.
-    Cooldown suppresses repeats on rapid redeploys.
+    Cooldown suppresses repeats on rapid redeploys unless FORCE_STARTUP_REMINDER=1.
     """
     now = datetime.now(timezone.utc)
     last = load_last_reminder()
+
+    if FORCE_STARTUP_REMINDER:
+        await send_reminder("initial/forced")
+        return
+
     if last is None or now - last >= INITIAL_COOLDOWN:
         await send_reminder("initial/startup")
     else:
@@ -145,7 +153,7 @@ async def on_ready():
 
     update_channels.start()
 
-    # Send NOW, then start the noon-only scheduler
+    # Send NOW (respects cooldown unless forced), then start the noon-only scheduler
     await initial_reminder_now()
     reminder_noon.start()
 
@@ -196,6 +204,17 @@ async def update_channels():
         last_online, last_in_voice, last_listening = online, in_voice, listening
     except Exception as e:
         print(f"Error updating channel names: {e}")
+
+
+# Owner-only manual trigger to DM now
+@bot.tree.command(name="remindme", description="Owner-only: DM me a /status reminder now")
+async def remindme_command(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("This command is owner-only.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    await send_reminder("manual/slash")
+    await interaction.followup.send("Sent you a DM reminder.", ephemeral=True)
 
 
 @bot.tree.command(name="status", description="View current online, voice, and music activity")
